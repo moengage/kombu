@@ -58,6 +58,7 @@ Transport Options
 from __future__ import annotations
 
 import string
+import threading
 from queue import Empty
 from typing import Any, Dict, Set
 
@@ -184,18 +185,29 @@ class Channel(virtual.Channel):
         return obj
 
     def _get_asb_sender(self, queue: str) -> SendReceive:
-        queue_obj = self._queue_cache.get(queue, None)
+        # adding the thread id in the cache key to avoid an issue in celery when
+        # running celery in multithreading mode.
+        # ServiceBusSender object is not thread-safe.
+        # Hence, creating only one object per thread & queue instead of
+        # only one object per queue
+        cache_key = f"{queue}_{threading.get_ident()}"
+        queue_obj = self._queue_cache.get(cache_key, None)
         if queue_obj is None or queue_obj.sender is None:
             sender = self.queue_service.get_queue_sender(
                 queue, keep_alive=self.uamqp_keep_alive_interval)
-            queue_obj = self._add_queue_to_cache(queue, sender=sender)
+            queue_obj = self._add_queue_to_cache(cache_key, sender=sender)
         return queue_obj
 
     def _get_asb_receiver(
             self, queue: str,
             recv_mode: ServiceBusReceiveMode = ServiceBusReceiveMode.PEEK_LOCK,
             queue_cache_key: str | None = None) -> SendReceive:
-        cache_key = queue_cache_key or queue
+        # adding the thread id in the cache key to avoid an issue in celery when
+        # running celery in multithreading mode.
+        # ServiceBusSender object is not thread-safe.
+        # Hence, creating only one object per thread & queue instead of
+        # only one object per queue
+        cache_key = queue_cache_key or f"{queue}_{threading.get_ident()}"
         queue_obj = self._queue_cache.get(cache_key, None)
         if queue_obj is None or queue_obj.receiver is None:
             receiver = self.queue_service.get_queue_receiver(
