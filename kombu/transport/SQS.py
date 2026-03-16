@@ -594,6 +594,8 @@ class Channel(virtual.Channel):
                     "'predefined_queues'."
                 ).format(queue))
             queue_url = self._queue_cache[queue]
+        elif queue in self._queue_cache:
+            queue_url = self._queue_cache[queue]
         else:
             queue_url = connection.get_queue_url(queue)
         return connection.receive_message(
